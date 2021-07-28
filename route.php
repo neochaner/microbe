@@ -32,9 +32,15 @@ class Route
     }
 
 
-    public static function run()
+    public static function run($skip_query = false)
     {
-        $paths = explode('/', $_SERVER['REQUEST_URI']);
+        if ($skip_query) {
+            $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+            $paths = explode('/', $uri);
+        } else {
+            $paths = explode('/', $_SERVER['REQUEST_URI']);
+        }
+
 
         foreach(self::$filters as $filter) {
             if (strrpos($_SERVER['REQUEST_URI'], $filter['start']) === 0) {
