@@ -3,149 +3,59 @@
 
 class Route
 {
+    private static $hooks = [];
+    private static $uri;
 
-    static $filters = [];
-    static $hooks = [];
-
-    public static function get($path, $function)
+    public static function get($text, callable $func)
     {
-        $paths = is_array($path) ? $path : [$path];
-
-        foreach($paths as $p) {
-
-            $params = self::getUriParams($p);
-
-            self::$hooks[] = [
-                'params' => $params,
-                'func' => $function
-            ];
-        }
-    }
-
-
-    public static function filter($start, $function)
+        self::request(null, $text, $func, true, true);
+    }    
+    
+    public static function regex($pattern, callable $func)
     {
-        self::$filters[] = [
-            'start' => $start,
-            'func' => $function
-        ];
+        self::request($pattern, null, $func, false, true);
     }
-
 
     public static function run($skip_query = false)
     {
+        $found = false;
+        self::$uri = $_SERVER['REQUEST_URI'];
+
         if ($skip_query) {
-            $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-            $paths = explode('/', $uri);
-        } else {
-            $paths = explode('/', $_SERVER['REQUEST_URI']);
+            self::$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
         }
 
-
-        foreach(self::$filters as $filter) {
-            if (strrpos($_SERVER['REQUEST_URI'], $filter['start']) === 0) {
-                call_user_func_array($filter['func'], []);
+        foreach(self::$hooks as $hook)
+        {
+            if (!empty($hook['text']) && $hook['text'] === self::$uri) {
+                $found = true;
+                call_user_func_array($hook['func'], []);
+            } elseif(!empty($hook['pattern']) && preg_match($hook['pattern'], self::$uri, $matches)) {
+                $found = true;
+                array_shift($matches);
+                call_user_func_array($hook['func'], $matches);
+            } else {
+                continue;
             }
-        }
 
-        foreach(self::$hooks as $hook) {
-
-            $args = [];
-
-            if (self::compareParams($paths, $hook['params'], $args)) {
-                call_user_func_array($hook['func'], $args);
+            if ($hook['break']) {
                 return true;
             }
         }
 
-        return false;
+        return $found;
     }
 
-    private static function getUriParams($query)
+    private static function request($pattern, $text, callable $func, $priority = false, $break = true)
     {
-        $paths = explode("/", $query);
-        return array_map(function($args) { return new UriParam($args); }, $paths);
-    }
+        $hook = [
+            'pattern'   => $pattern,
+            'text'      => $text,
+            'func'      => $func,
+            'priority'  => $priority,
+            'break'     => $break,
+        ];
 
-    private static function compareParams($paths, $params, &$args)
-    {
-        $args = [];
-        $length = count($paths);
-        $i = 0;
-
-        foreach ($params as $param) {
-
-            if ($length <= $i) {
-                return false;
-            }
-
-            $path = $paths[$i];
-
-            if ($path === '' && $param->path !== '') {
-                return false;
-            }
-
-            if ($path === '' && $param->path === '') {
-                $i++;
-                continue;
-            }
-
-            if ($param->isParam) {
-                $args[] = ($param->paramName === 'num') ? (int)$path : $path;
-
-            } else {
-
-                if ($param->path != $path) {
-                    return false;
-                }
-            }
-
-            $i++;
-            continue;
-        }
-        
-        return $length === $i;
-    }
-
- 
-
-
-
-
-}
-
-
-
-
-class UriParam
-{
-
-    public $isParam;
-    public $paramName;
-    public $path;
-
-    function __construct($path)
-    {
-        $this->path         = $path;
-        $this->isParam      = false;
-
-        $length = strlen($path);
-
-        if ($length <= 2) {
-            return false;
-        }
-
-        if ($path[0] === '{' && $path[$length-1] === '}') {
-            
-            $this->isParam = true;
-
-            if ($path[$length-2] === '?') {
-                // $this->isVarious = true;
-                $this->paramName = substr($path, 1, $length-3);
-            } else {
-                // $this->isVarious = false;
-                $this->paramName = substr($path, 1, $length-2);
-            }
-        }
+        $priority ? array_unshift(self::$hooks, $hook) : self::$hooks[] = $hook;
     }
 }
