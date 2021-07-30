@@ -6,8 +6,8 @@ Route::get('/my_page', function() {
     echo 'route /my_page';
 });
   
-Route::get('/page/{num}/', function($num) {
-    echo "number: $num";
+Route::regex('/^\/page\/(\d+)\/$/', function($num) {
+    echo "page number: $num";
 });
   
 // START DISPATCH
